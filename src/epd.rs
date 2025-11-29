@@ -1,5 +1,6 @@
-use adafruit_kb2040::hal::spi::{Spi, SpiDevice, State, ValidSpiPinout};
+use adafruit_kb2040::hal::spi::{Enabled, Spi, SpiDevice, ValidSpiPinout};
 use embedded_hal::digital::{InputPin, OutputPin};
+use embedded_hal::spi::SpiBus;
 
 /// Number of bytes the Arduino sketch wrote for a full-screen update
 pub const ALLSCREEN_GRAPH_BYTES: usize = 4000;
@@ -8,14 +9,13 @@ pub const ALLSCREEN_GRAPH_BYTES: usize = 4000;
 ///
 /// This is a minimal port of the Arduino `EPD_WhiteScreen_Black` routine.
 /// It assumes the SPI device and the control pins are already configured.
-pub fn epd_white_screen_black<S, D, P, CS, DC, BUSY>(
-    spi: &mut Spi<S, D, P>,
+pub fn epd_white_screen_black<D, P, CS, DC, BUSY>(
+    spi: &mut Spi<Enabled, D, P>,
     cs: &mut CS,
     dc: &mut DC,
     busy: &mut BUSY,
 ) where
     // use the SPI bus write trait from embedded-hal 1.0 so we can call `spi.write(&[u8])`
-    S: State,
     D: SpiDevice,
     P: ValidSpiPinout<D>,
     CS: OutputPin,
@@ -34,9 +34,8 @@ pub fn epd_white_screen_black<S, D, P, CS, DC, BUSY>(
     update(spi, cs, dc, busy);
 }
 
-fn write_command<S, D, P, CS, DC>(spi: &mut Spi<S, D, P>, cs: &mut CS, dc: &mut DC, cmd: u8)
+fn write_command<D, P, CS, DC>(spi: &mut Spi<Enabled, D, P>, cs: &mut CS, dc: &mut DC, cmd: u8)
 where
-    S: State,
     D: SpiDevice,
     P: ValidSpiPinout<D>,
     CS: OutputPin,
@@ -45,30 +44,32 @@ where
     DC: OutputPin,
 {
     // DC low for command
-    dc.set_low();
-    cs.set_low();
-    spi.write(&[cmd]);
-    cs.set_high();
+    let _ = dc.set_low();
+    let _ = cs.set_low();
+    let _ = spi.write(&[cmd]);
+    let _ = cs.set_high();
 }
 
-fn write_data<S, D, P, CS, DC>(spi: &mut Spi<S, D, P>, cs: &mut CS, dc: &mut DC, data: u8)
+fn write_data<D, P, CS, DC>(spi: &mut Spi<Enabled, D, P>, cs: &mut CS, dc: &mut DC, data: u8)
 where
-    S: State,
     D: SpiDevice,
     P: ValidSpiPinout<D>,
     CS: OutputPin,
     DC: OutputPin,
 {
     // DC high for data
-    dc.set_high();
-    cs.set_low();
-    spi.write(&[data]);
-    cs.set_high();
+    let _ = dc.set_high();
+    let _ = cs.set_low();
+    let _ = spi.write(&[data]);
+    let _ = cs.set_high();
 }
 
-fn update<S, D, P, CS, DC, BUSY>(spi: &mut Spi<S, D, P>, cs: &mut CS, dc: &mut DC, busy: &mut BUSY)
-where
-    S: State,
+fn update<D, P, CS, DC, BUSY>(
+    spi: &mut Spi<Enabled, D, P>,
+    cs: &mut CS,
+    dc: &mut DC,
+    busy: &mut BUSY,
+) where
     D: SpiDevice,
     P: ValidSpiPinout<D>,
     CS: OutputPin,
