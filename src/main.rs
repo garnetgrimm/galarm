@@ -1,48 +1,30 @@
-//! # Rainbow Example for the Adafruit KB2040
-//!
-//! Runs a rainbow-effect colour wheel on the on-board LED.
-//!
-//! Uses the `ws2812_pio` driver to control the LED, which in turns uses the
-//! RP2040's PIO block.
-
 #![no_std]
 #![no_main]
 
-use adafruit_kb2040::entry;
-use core::iter::once;
-use embedded_hal::delay::DelayNs;
+// Ensure we halt the program on panic
 use panic_halt as _;
 
-use adafruit_kb2040::{
-    XOSC_CRYSTAL_FREQ,
-    hal::{
-        Sio,
-        clocks::{Clock, init_clocks_and_plls},
-        pac,
-        pio::PIOExt,
-        timer::Timer,
-        watchdog::Watchdog,
-    },
-};
-use smart_leds::{RGB8, SmartLedsWrite, brightness};
-use ws2812_pio::Ws2812;
+use adafruit_kb2040 as bsp;
+use bsp::hal;
 
-/// Entry point to our bare-metal application.
-///
-/// The `#[entry]` macro ensures the Cortex-M start-up code calls this
-/// function as soon as all global variables are initialised.
-///
-/// The function configures the RP2040 peripherals, then the LED, then runs
-/// the colour wheel in an infinite loop.
-#[entry]
+use cortex_m::prelude::*;
+use hal::clocks::Clock;
+use hal::fugit::RateExtU32;
+
+// Peripheral Access Crate provides low-level register access
+use hal::pac;
+
+#[bsp::entry]
 fn main() -> ! {
-    // Configure the RP2040 peripherals
-
+    // Grab our singleton objects
     let mut pac = pac::Peripherals::take().unwrap();
-    let mut watchdog = Watchdog::new(pac.WATCHDOG);
 
-    let clocks = init_clocks_and_plls(
-        XOSC_CRYSTAL_FREQ,
+    // Set up the watchdog driver - needed by the clock setup code
+    let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
+
+    // Configure the clocks
+    let clocks = hal::clocks::init_clocks_and_plls(
+        bsp::XOSC_CRYSTAL_FREQ,
         pac.XOSC,
         pac.CLOCKS,
         pac.PLL_SYS,
@@ -50,58 +32,63 @@ fn main() -> ! {
         &mut pac.RESETS,
         &mut watchdog,
     )
-    .ok()
     .unwrap();
 
-    let sio = Sio::new(pac.SIO);
+    // The single-cycle I/O block controls our GPIO pins
+    let sio = hal::Sio::new(pac.SIO);
 
-    let pins = adafruit_kb2040::Pins::new(
+    // Set the pins to their default state
+    let pins = hal::gpio::Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
         sio.gpio_bank0,
         &mut pac.RESETS,
     );
 
-    let timer = Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
+    // These are implicitly used by the spi driver if they are in the correct mode
+    let spi_mosi = pins.gpio7.into_function::<hal::gpio::FunctionSpi>();
+    let spi_miso = pins.gpio4.into_function::<hal::gpio::FunctionSpi>();
+    let spi_sclk = pins.gpio6.into_function::<hal::gpio::FunctionSpi>();
+    let spi = hal::spi::Spi::<_, _, _, 8>::new(pac.SPI0, (spi_mosi, spi_miso, spi_sclk));
 
-    // Configure the addressable LED
-    let (mut pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
-
-    let mut ws = Ws2812::new(
-        pins.neopixel.into_function(),
-        &mut pio,
-        sm0,
+    // Exchange the uninitialised SPI driver for an initialised one
+    let mut spi = spi.init(
+        &mut pac.RESETS,
         clocks.peripheral_clock.freq(),
-        timer.count_down(),
+        16.MHz(),
+        embedded_hal::spi::MODE_0,
     );
 
-    // Infinite colour wheel loop
+    // Write out 0, ignore return value
+    if spi.write(&[0]).is_ok() {
+        // SPI write was successful
+    };
 
-    let mut n: u8 = 128;
-    let mut timer = timer; // rebind to force a copy of the timer
+    // write 50, then check the return
+    let send_success = spi.send(50);
+    match send_success {
+        Ok(_) => {
+            // We succeeded, check the read value
+            if let Ok(_x) = spi.read() {
+                // We got back `x` in exchange for the 0x50 we sent.
+            };
+        }
+        Err(_) => todo!(),
+    }
+
+    // Do a read+write at the same time. Data in `buffer` will be replaced with
+    // the data read from the SPI device.
+    let mut buffer: [u8; 4] = [1, 2, 3, 4];
+    let transfer_success = spi.transfer(&mut buffer);
+    #[allow(clippy::single_match)]
+    match transfer_success {
+        Ok(_) => {}  // Handle success
+        Err(_) => {} // handle errors
+    };
+
     loop {
-        ws.write(brightness(once(wheel(n)), 32)).unwrap();
-        n = n.wrapping_add(1);
-
-        timer.delay_ms(25);
+        cortex_m::asm::wfi();
     }
 }
 
-/// Convert a number from `0..=255` to an RGB color triplet.
-///
-/// The colours are a transition from red, to green, to blue and back to red.
-fn wheel(mut wheel_pos: u8) -> RGB8 {
-    wheel_pos = 255 - wheel_pos;
-    if wheel_pos < 85 {
-        // No green in this sector - red and blue only
-        (255 - (wheel_pos * 3), 0, wheel_pos * 3).into()
-    } else if wheel_pos < 170 {
-        // No red in this sector - green and blue only
-        wheel_pos -= 85;
-        (0, wheel_pos * 3, 255 - (wheel_pos * 3)).into()
-    } else {
-        // No blue in this sector - red and green only
-        wheel_pos -= 170;
-        (wheel_pos * 3, 255 - (wheel_pos * 3), 0).into()
-    }
-}
+// End of file
