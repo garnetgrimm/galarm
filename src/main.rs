@@ -64,8 +64,8 @@ fn main() -> ! {
 
     // Configure simple control pins for an EPD (examples: GPIO8-11).
     // Adjust pins to match your wiring.
-    let mut cs = pins.gpio11.into_push_pull_output();
-    let mut dc = pins.gpio10.into_push_pull_output();
+    let mut cs = pins.gpio2.into_push_pull_output();
+    let mut dc = pins.gpio3.into_push_pull_output();
     let mut rst = pins.gpio9.into_push_pull_output();
     let mut busy = pins.gpio8.into_pull_up_input();
 
