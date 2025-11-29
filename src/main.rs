@@ -1,39 +1,48 @@
-//! Blinks the LED on a Pico board
+//! # Rainbow Example for the Adafruit KB2040
 //!
-//! This will blink an LED attached to GP25, which is the pin the Pico uses for the on-board LED.
+//! Runs a rainbow-effect colour wheel on the on-board LED.
+//!
+//! Uses the `ws2812_pio` driver to control the LED, which in turns uses the
+//! RP2040's PIO block.
+
 #![no_std]
 #![no_main]
 
-use bsp::entry;
-use defmt::*;
-use defmt_rtt as _;
-use embedded_hal::digital::OutputPin;
-use panic_probe as _;
+use adafruit_kb2040::entry;
+use core::iter::once;
+use embedded_hal::delay::DelayNs;
+use panic_halt as _;
 
-// Provide an alias for our BSP so we can switch targets quickly.
-// Uncomment the BSP you included in Cargo.toml, the rest of the code does not need to change.
-use rp_pico as bsp;
-// use sparkfun_pro_micro_rp2040 as bsp;
-
-use bsp::hal::{
-    clocks::{Clock, init_clocks_and_plls},
-    pac,
-    sio::Sio,
-    watchdog::Watchdog,
+use adafruit_kb2040::{
+    XOSC_CRYSTAL_FREQ,
+    hal::{
+        Sio,
+        clocks::{Clock, init_clocks_and_plls},
+        pac,
+        pio::PIOExt,
+        timer::Timer,
+        watchdog::Watchdog,
+    },
 };
+use smart_leds::{RGB8, SmartLedsWrite, brightness};
+use ws2812_pio::Ws2812;
 
+/// Entry point to our bare-metal application.
+///
+/// The `#[entry]` macro ensures the Cortex-M start-up code calls this
+/// function as soon as all global variables are initialised.
+///
+/// The function configures the RP2040 peripherals, then the LED, then runs
+/// the colour wheel in an infinite loop.
 #[entry]
 fn main() -> ! {
-    info!("Program start");
-    let mut pac = pac::Peripherals::take().unwrap();
-    let core = pac::CorePeripherals::take().unwrap();
-    let mut watchdog = Watchdog::new(pac.WATCHDOG);
-    let sio = Sio::new(pac.SIO);
+    // Configure the RP2040 peripherals
 
-    // External high-speed crystal on the pico board is 12Mhz
-    let external_xtal_freq_hz = 12_000_000u32;
+    let mut pac = pac::Peripherals::take().unwrap();
+    let mut watchdog = Watchdog::new(pac.WATCHDOG);
+
     let clocks = init_clocks_and_plls(
-        external_xtal_freq_hz,
+        XOSC_CRYSTAL_FREQ,
         pac.XOSC,
         pac.CLOCKS,
         pac.PLL_SYS,
@@ -44,34 +53,55 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
+    let sio = Sio::new(pac.SIO);
 
-    let pins = bsp::Pins::new(
+    let pins = adafruit_kb2040::Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
         sio.gpio_bank0,
         &mut pac.RESETS,
     );
 
-    // This is the correct pin on the Raspberry Pico board. On other boards, even if they have an
-    // on-board LED, it might need to be changed.
-    //
-    // Notably, on the Pico W, the LED is not connected to any of the RP2040 GPIOs but to the cyw43 module instead.
-    // One way to do that is by using [embassy](https://github.com/embassy-rs/embassy/blob/main/examples/rp/src/bin/wifi_blinky.rs)
-    //
-    // If you have a Pico W and want to toggle a LED with a simple GPIO output pin, you can connect an external
-    // LED to one of the GPIO pins, and reference that pin here. Don't forget adding an appropriate resistor
-    // in series with the LED.
-    let mut led_pin = pins.led.into_push_pull_output();
+    let timer = Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
 
+    // Configure the addressable LED
+    let (mut pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
+
+    let mut ws = Ws2812::new(
+        pins.neopixel.into_function(),
+        &mut pio,
+        sm0,
+        clocks.peripheral_clock.freq(),
+        timer.count_down(),
+    );
+
+    // Infinite colour wheel loop
+
+    let mut n: u8 = 128;
+    let mut timer = timer; // rebind to force a copy of the timer
     loop {
-        info!("on!");
-        led_pin.set_high().unwrap();
-        delay.delay_ms(500);
-        info!("off!");
-        led_pin.set_low().unwrap();
-        delay.delay_ms(500);
+        ws.write(brightness(once(wheel(n)), 32)).unwrap();
+        n = n.wrapping_add(1);
+
+        timer.delay_ms(25);
     }
 }
 
-// End of file
+/// Convert a number from `0..=255` to an RGB color triplet.
+///
+/// The colours are a transition from red, to green, to blue and back to red.
+fn wheel(mut wheel_pos: u8) -> RGB8 {
+    wheel_pos = 255 - wheel_pos;
+    if wheel_pos < 85 {
+        // No green in this sector - red and blue only
+        (255 - (wheel_pos * 3), 0, wheel_pos * 3).into()
+    } else if wheel_pos < 170 {
+        // No red in this sector - green and blue only
+        wheel_pos -= 85;
+        (0, wheel_pos * 3, 255 - (wheel_pos * 3)).into()
+    } else {
+        // No blue in this sector - red and green only
+        wheel_pos -= 170;
+        (wheel_pos * 3, 255 - (wheel_pos * 3), 0).into()
+    }
+}

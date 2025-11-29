@@ -8,16 +8,16 @@ license = "MIT OR Apache-2.0"
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
 embedded-hal = { version = "1.0.0" }
+smart-leds = "0.3.0"
+ws2812-pio = "0.8.0"
+panic-halt = "0.2.0"
 
 defmt = "1"
 defmt-rtt = "1"
 panic-probe = { version = "1", features = ["print-defmt"] }
 
 # We're using a Pico by default on this template
-rp-pico = "0.9"
-
-# but you can use any BSP. Uncomment this to use the pro_micro_rp2040 BSP instead
-# sparkfun-pro-micro-rp2040 = "0.8"
+adafruit-kb2040 = "0.8.0"
 
 # If you're not going to use a Board Support Package you'll need these:
 # rp2040-hal = { version="0.11", features=["rt", "critical-section-impl"] }
