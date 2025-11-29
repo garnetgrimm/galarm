@@ -7,12 +7,15 @@ use panic_halt as _;
 use adafruit_kb2040 as bsp;
 use bsp::hal;
 
-use cortex_m::prelude::*;
 use hal::clocks::Clock;
 use hal::fugit::RateExtU32;
 
 // Peripheral Access Crate provides low-level register access
 use hal::pac;
+mod epd;
+
+use cortex_m::prelude::_embedded_hal_blocking_spi_Write;
+use embedded_hal::digital::OutputPin;
 
 #[bsp::entry]
 fn main() -> ! {
@@ -59,31 +62,24 @@ fn main() -> ! {
         embedded_hal::spi::MODE_0,
     );
 
+    // Configure simple control pins for an EPD (examples: GPIO8-11).
+    // Adjust pins to match your wiring.
+    let mut cs = pins.gpio11.into_push_pull_output();
+    let mut dc = pins.gpio10.into_push_pull_output();
+    let mut rst = pins.gpio9.into_push_pull_output();
+    let mut busy = pins.gpio8.into_pull_up_input();
+
+    // Optionally toggle reset (match Arduino's reset behavior)
+    let _ = rst.set_low();
+    cortex_m::asm::delay(1000);
+    let _ = rst.set_high();
+
+    // Perform a full-screen black update using the new Rust helper
+    epd::epd_white_screen_black(&mut spi, &mut cs, &mut dc, &mut busy);
+
     // Write out 0, ignore return value
     if spi.write(&[0]).is_ok() {
         // SPI write was successful
-    };
-
-    // write 50, then check the return
-    let send_success = spi.send(50);
-    match send_success {
-        Ok(_) => {
-            // We succeeded, check the read value
-            if let Ok(_x) = spi.read() {
-                // We got back `x` in exchange for the 0x50 we sent.
-            };
-        }
-        Err(_) => todo!(),
-    }
-
-    // Do a read+write at the same time. Data in `buffer` will be replaced with
-    // the data read from the SPI device.
-    let mut buffer: [u8; 4] = [1, 2, 3, 4];
-    let transfer_success = spi.transfer(&mut buffer);
-    #[allow(clippy::single_match)]
-    match transfer_success {
-        Ok(_) => {}  // Handle success
-        Err(_) => {} // handle errors
     };
 
     loop {
