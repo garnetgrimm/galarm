@@ -14,7 +14,6 @@ use hal::fugit::RateExtU32;
 use hal::pac;
 mod epd;
 
-use cortex_m::prelude::_embedded_hal_blocking_spi_Write;
 use embedded_hal::digital::OutputPin;
 
 #[bsp::entry]
@@ -74,16 +73,10 @@ fn main() -> ! {
     cortex_m::asm::delay(1000);
     let _ = rst.set_high();
 
-    // Perform a full-screen black update using the new Rust helper
-    epd::epd_white_screen_black(&mut spi, &mut cs, &mut dc, &mut busy);
-
-    // Write out 0, ignore return value
-    if spi.write(&[0]).is_ok() {
-        // SPI write was successful
-    };
-
     loop {
-        cortex_m::asm::wfi();
+        epd::write_full_screen(&mut spi, &mut cs, &mut dc, &mut busy, 0x00);
+        cortex_m::asm::delay(1000);
+        epd::write_full_screen(&mut spi, &mut cs, &mut dc, &mut busy, 0xFF);
     }
 }
 

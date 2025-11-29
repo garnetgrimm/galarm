@@ -5,14 +5,12 @@ use embedded_hal::spi::SpiBus;
 pub const ALLSCREEN_GRAPH_BYTES: usize = 4000;
 
 /// Write a full-screen black image to the display and trigger an update.
-///
-/// This is a minimal port of the Arduino `EPD_WhiteScreen_Black` routine.
-/// It assumes the SPI device and the control pins are already configured.
-pub fn epd_white_screen_black<SPI, CS, DC, BUSY>(
+pub fn write_full_screen<SPI, CS, DC, BUSY>(
     spi: &mut SPI,
     cs: &mut CS,
     dc: &mut DC,
     busy: &mut BUSY,
+    brightness: u8,
 ) where
     SPI: SpiBus<u8>,
     CS: OutputPin,
@@ -24,7 +22,7 @@ pub fn epd_white_screen_black<SPI, CS, DC, BUSY>(
 
     // Write ALLSCREEN_GRAPH_BYTES of 0x00 (black in the Arduino driver)
     for _ in 0..ALLSCREEN_GRAPH_BYTES {
-        write_data(spi, cs, dc, 0x00);
+        write_data(spi, cs, dc, brightness);
     }
 
     // Trigger an update (matches Arduino: 0x22 {0xF7} then 0x20)
