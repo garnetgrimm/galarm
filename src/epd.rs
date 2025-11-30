@@ -2,7 +2,8 @@ use embedded_hal::digital::{InputPin, OutputPin};
 use embedded_hal::spi::SpiBus;
 
 pub const EPD_WIDTH: usize = 250;
-pub const EPD_HEIGHT: usize = 16;
+pub const EPD_HEIGHT: usize = 122;
+pub const EPD_BUFFER_SIZE: usize = EPD_WIDTH * EPD_HEIGHT / 8;
 
 pub struct PaperDisplay<SPI, CS, DC, RST, BUSY> {
     pub spi: SPI,
@@ -10,12 +11,7 @@ pub struct PaperDisplay<SPI, CS, DC, RST, BUSY> {
     pub dc: DC,
     pub rst: RST,
     pub busy: BUSY,
-}
-
-macro_rules! get_byte {
-    ($val:expr, $n:expr) => {
-        (($val >> ($n * 8)) & 0xFF) as u8
-    };
+    pub buffer: [u8; EPD_BUFFER_SIZE],
 }
 
 impl<SPI, CS, DC, RST, BUSY> PaperDisplay<SPI, CS, DC, RST, BUSY>
@@ -26,129 +22,130 @@ where
     RST: OutputPin,
     BUSY: InputPin,
 {
-    /// Hardware initialization for the EPD (translated from Arduino EPD_HW_Init)
-    pub fn init(&mut self, delay: &mut impl embedded_hal::delay::DelayNs) {
-        // Reset sequence
-        let _ = self.rst.set_low();
-        delay.delay_ms(1);
-        let _ = self.rst.set_high();
-        delay.delay_ms(1);
-
-        // Wait for busy
+    pub fn reset(&mut self, delay: &mut impl embedded_hal::delay::DelayNs) {
+        self.rst.set_low().ok();
+        delay.delay_ms(10);
+        self.rst.set_high().ok();
+        delay.delay_ms(10);
         while !self.busy.is_low().unwrap_or(false) {}
+    }
 
+    pub fn init(&mut self, delay: &mut impl embedded_hal::delay::DelayNs) {
+        self.reset(delay);
         self.write_command(0x12); // SWRESET
         while !self.busy.is_low().unwrap_or(false) {}
-
-        self.write_command(0x01); // Driver output control
-        self.write_data(0xF9);
-        self.write_data(0x00);
-        self.write_data(0x00);
-
-        self.write_command(0x11); // data entry mode
-        self.write_data(0x01);
-
-        self.write_command(0x44); // set Ram-X address start/end position
-        self.write_data(0x00);
-        self.write_data(0x0F); // 0x0F-->(15+1)*8=128
-
-        self.write_command(0x45); // set Ram-Y address start/end position
-        self.write_data(0xF9); // 0xF9-->(249+1)=250
-        self.write_data(0x00);
-        self.write_data(0x00);
-        self.write_data(0x00);
-
-        self.write_command(0x3C); // BorderWaveform
-        self.write_data(0x01);
-
-        self.write_command(0x18);
-        self.write_data(0x80);
-
-        self.write_command(0x4E); // set RAM x address count to 0;
-        self.write_data(0x00);
-        self.write_command(0x4F); // set RAM y address count to 0X199;
-        self.write_data(0xF9);
-        self.write_data(0x00);
-        while !self.busy.is_low().unwrap_or(false) {}
+        self.fill_screen(0xFF); // White
     }
 
-    /// Write a full-screen black image to the display and trigger an update.
-    pub fn write_full_screen(&mut self, brightness: u8) {
-        // Command 0x24: write RAM (black/white image)
-        self.write_command(0x24);
-
-        // Write ALLSCREEN_GRAPH_BYTES of 0x00 (black in the Arduino driver)
-        for _ in 0..(EPD_WIDTH * EPD_HEIGHT) {
-            self.write_data(brightness);
+    pub fn fill_screen(&mut self, color: u8) {
+        for b in self.buffer.iter_mut() {
+            *b = color;
         }
-
-        // Trigger an update (matches Arduino: 0x22 {0xF7} then 0x20)
-        self.update(true);
     }
 
-    /// Write a partial image to the display and trigger a partial update (compile-time check for data size).
-    /// x_start and y_start are pixel coordinates, data is an array, part_column and part_line are region size in pixels.
-    pub fn write_part<const COLS: usize, const ROWS: usize>(
+    pub fn set_ram_area(
         &mut self,
-        x_start: u32,
-        y_start: u32,
-        data: &[[u8; COLS]; ROWS],
+        x_start: u8,
+        x_end: u8,
+        y_start: u8,
+        y_start1: u8,
+        y_end: u8,
+        y_end1: u8,
     ) {
-        let img_rows = ROWS as u32 / 8;
-        let img_cols = COLS as u32;
+        self.write_command(0x44);
+        self.write_data(&[x_start, x_end]);
+        self.write_command(0x45);
+        self.write_data(&[y_start, y_start1, y_end, y_end1]);
+    }
 
-        let x_start = x_start / 8;
-        let x_end = x_start + img_rows - 1;
+    pub fn set_ram_pointer(&mut self, addr_x: u8, addr_y: u8, addr_y1: u8) {
+        self.write_command(0x4E);
+        self.write_data(&[addr_x]);
+        self.write_command(0x4F);
+        self.write_data(&[addr_y, addr_y1]);
+    }
 
-        let y_start = y_start;
-        let y_end = y_start + img_cols - 1;
-
-        self.write_command(0x44); // set RAM x address start/end
-        self.write_data(get_byte!(x_start, 0));
-        self.write_data(get_byte!(x_end, 0));
-
-        self.write_command(0x45); // set RAM y address start/end
-        self.write_data(get_byte!(y_start, 0));
-        self.write_data(get_byte!(y_start, 1));
-        self.write_data(get_byte!(y_end, 0));
-        self.write_data(get_byte!(y_end, 1));
-
-        self.write_command(0x4E); // set RAM x address count to x_start
-        self.write_data(get_byte!(x_start, 0));
-        self.write_command(0x4F); // set RAM y address count to y_start
-        self.write_data(get_byte!(y_start, 0));
-        self.write_data(get_byte!(y_start, 1));
-
-        self.write_command(0x24); // Write Black and White image to RAM
-        for b in data.iter().flatten() {
-            self.write_data(*b);
+    pub fn write_full_screen(&mut self) {
+        self.write_command(0x24);
+        let buffer = self.buffer.clone();
+        for &b in &buffer {
+            self.write_data(&[b]);
         }
+        self.update_full();
+    }
 
-        self.update(false);
+    pub fn write_window(&mut self, x: u16, y: u16, w: u16, h: u16) {
+        let xe = (x + w).min(EPD_WIDTH as u16) - 1;
+        let ye = (y + h).min(EPD_HEIGHT as u16) - 1;
+        let xs_d8 = x / 8;
+        let xe_d8 = xe / 8;
+        self.set_ram_area(
+            xs_d8 as u8,
+            xe_d8 as u8,
+            (y % 256) as u8,
+            (y / 256) as u8,
+            (ye % 256) as u8,
+            (ye / 256) as u8,
+        );
+        self.set_ram_pointer(xs_d8 as u8, (y % 256) as u8, (y / 256) as u8);
+        self.write_command(0x24);
+        for y1 in y..=ye {
+            for x1 in xs_d8..=xe_d8 {
+                let idx = y1 as usize * (EPD_WIDTH / 8) + x1 as usize;
+                let data = if idx < EPD_BUFFER_SIZE {
+                    self.buffer[idx]
+                } else {
+                    0xFF
+                };
+                self.write_data(&[data]);
+            }
+        }
+        self.update_part();
+    }
+
+    pub fn draw_pixel(&mut self, x: u16, y: u16, color: bool) {
+        if x >= EPD_WIDTH as u16 || y >= EPD_HEIGHT as u16 {
+            return;
+        }
+        let idx = (y as usize) * (EPD_WIDTH / 8) + (x as usize) / 8;
+        let bit = 7 - (x % 8);
+        if color {
+            self.buffer[idx] &= !(1 << bit);
+        } else {
+            self.buffer[idx] |= 1 << bit;
+        }
     }
 
     fn write_command(&mut self, cmd: u8) {
-        // DC low for command
-        self.dc.set_low().unwrap();
-        self.cs.set_low().unwrap();
-        self.spi.write(&[cmd]).unwrap();
-        self.cs.set_high().unwrap();
+        self.dc.set_low().ok();
+        self.cs.set_low().ok();
+        self.spi.write(&[cmd]).ok();
+        self.cs.set_high().ok();
     }
 
-    fn write_data(&mut self, data: u8) {
-        // DC high for data
-        self.dc.set_high().unwrap();
-        self.cs.set_low().unwrap();
-        self.spi.write(&[data]).unwrap();
-        self.cs.set_high().unwrap();
+    fn write_data(&mut self, data: &[u8]) {
+        self.dc.set_high().ok();
+        self.cs.set_low().ok();
+        self.spi.write(data).ok();
+        self.cs.set_high().ok();
     }
 
-    fn update(&mut self, complete: bool) {
+    fn update_full(&mut self) {
         self.write_command(0x22);
-        self.write_data(if complete { 0xF7 } else { 0xFF });
+        self.write_data(&[0xF7]);
         self.write_command(0x20);
-        // Wait for BUSY to go low (Arduino code waits until BUSY==0)
-        loop {
+        self.wait_busy();
+    }
+
+    fn update_part(&mut self) {
+        self.write_command(0x22);
+        self.write_data(&[0xFF]);
+        self.write_command(0x20);
+        self.wait_busy();
+    }
+
+    fn wait_busy(&mut self) {
+        for _ in 0..400 {
             if self.busy.is_low().unwrap_or(false) {
                 break;
             }

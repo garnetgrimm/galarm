@@ -76,14 +76,18 @@ fn main() -> ! {
         dc,
         rst,
         busy,
+        buffer: [0xFF; epd::EPD_BUFFER_SIZE], // Initialize buffer to white
     };
 
     display.init(&mut timer);
 
     loop {
-        display.write_full_screen(0x00);
+        display.fill_screen(0xff); // Fill buffer with black
+        display.write_full_screen(); // Update display with buffer
         timer.delay_ms(1000);
-        display.write_full_screen(0xFF);
+
+        display.fill_screen(0x00); // Fill buffer with white
+        display.write_full_screen();
         timer.delay_ms(1000);
     }
 }
