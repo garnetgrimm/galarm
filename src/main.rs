@@ -14,6 +14,7 @@ use hal::fugit::RateExtU32;
 use hal::pac;
 mod epd;
 
+use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
 
 #[bsp::entry]
@@ -61,6 +62,8 @@ fn main() -> ! {
         embedded_hal::spi::MODE_0,
     );
 
+    let mut timer = hal::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
+
     // Configure simple control pins for an EPD (examples: GPIO8-11).
     // Adjust pins to match your wiring.
     let mut cs = pins.gpio2.into_push_pull_output();
@@ -70,13 +73,14 @@ fn main() -> ! {
 
     // Optionally toggle reset (match Arduino's reset behavior)
     let _ = rst.set_low();
-    cortex_m::asm::delay(1000);
+    timer.delay_ms(10000);
     let _ = rst.set_high();
 
     loop {
         epd::write_full_screen(&mut spi, &mut cs, &mut dc, &mut busy, 0x00);
-        cortex_m::asm::delay(1000);
+        timer.delay_ms(1000);
         epd::write_full_screen(&mut spi, &mut cs, &mut dc, &mut busy, 0xFF);
+        timer.delay_ms(1000);
     }
 }
 
