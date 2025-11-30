@@ -71,10 +71,13 @@ fn main() -> ! {
     let mut rst = pins.gpio9.into_push_pull_output();
     let mut busy = pins.gpio8.into_pull_up_input();
 
-    // Optionally toggle reset (match Arduino's reset behavior)
     let _ = rst.set_low();
     timer.delay_ms(10000);
     let _ = rst.set_high();
+    timer.delay_ms(10000);
+
+    // Hardware initialization for EPD
+    epd::init(&mut spi, &mut cs, &mut dc, &mut busy);
 
     loop {
         epd::write_full_screen(&mut spi, &mut cs, &mut dc, &mut busy, 0x00);

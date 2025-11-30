@@ -73,3 +73,49 @@ where
         }
     }
 }
+
+/// Hardware initialization for the EPD (translated from Arduino EPD_HW_Init)
+pub fn init<SPI, CS, DC, BUSY>(spi: &mut SPI, cs: &mut CS, dc: &mut DC, busy: &mut BUSY)
+where
+    SPI: SpiBus<u8>,
+    CS: OutputPin,
+    DC: OutputPin,
+    BUSY: InputPin,
+{
+    // Wait for busy
+    while !busy.is_low().unwrap_or(false) {}
+
+    write_command(spi, cs, dc, 0x12); // SWRESET
+    while !busy.is_low().unwrap_or(false) {}
+
+    write_command(spi, cs, dc, 0x01); // Driver output control
+    write_data(spi, cs, dc, 0xF9);
+    write_data(spi, cs, dc, 0x00);
+    write_data(spi, cs, dc, 0x00);
+
+    write_command(spi, cs, dc, 0x11); // data entry mode
+    write_data(spi, cs, dc, 0x01);
+
+    write_command(spi, cs, dc, 0x44); // set Ram-X address start/end position
+    write_data(spi, cs, dc, 0x00);
+    write_data(spi, cs, dc, 0x0F); // 0x0F-->(15+1)*8=128
+
+    write_command(spi, cs, dc, 0x45); // set Ram-Y address start/end position
+    write_data(spi, cs, dc, 0xF9); // 0xF9-->(249+1)=250
+    write_data(spi, cs, dc, 0x00);
+    write_data(spi, cs, dc, 0x00);
+    write_data(spi, cs, dc, 0x00);
+
+    write_command(spi, cs, dc, 0x3C); // BorderWaveform
+    write_data(spi, cs, dc, 0x01);
+
+    write_command(spi, cs, dc, 0x18);
+    write_data(spi, cs, dc, 0x80);
+
+    write_command(spi, cs, dc, 0x4E); // set RAM x address count to 0;
+    write_data(spi, cs, dc, 0x00);
+    write_command(spi, cs, dc, 0x4F); // set RAM y address count to 0X199;
+    write_data(spi, cs, dc, 0xF9);
+    write_data(spi, cs, dc, 0x00);
+    while !busy.is_low().unwrap_or(false) {}
+}
