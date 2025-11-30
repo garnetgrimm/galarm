@@ -79,10 +79,14 @@ fn main() -> ! {
     // Hardware initialization for EPD
     epd::init(&mut spi, &mut cs, &mut dc, &mut busy);
 
+    const COLS: usize = 16;
+    const ROWS: usize = 16;
+    let data: [[u8; COLS]; ROWS] = [[0x00; COLS]; ROWS];
+
     loop {
-        epd::write_full_screen(&mut spi, &mut cs, &mut dc, &mut busy, 0x00);
-        timer.delay_ms(1000);
         epd::write_full_screen(&mut spi, &mut cs, &mut dc, &mut busy, 0xFF);
+        timer.delay_ms(1000);
+        epd::write_part(&mut spi, &mut cs, &mut dc, &mut busy, 64, 16, &data);
         timer.delay_ms(1000);
     }
 }
