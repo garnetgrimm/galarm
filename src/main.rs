@@ -72,9 +72,9 @@ fn main() -> ! {
     let mut busy = pins.gpio8.into_pull_up_input();
 
     let _ = rst.set_low();
-    timer.delay_ms(10000);
+    timer.delay_ms(500);
     let _ = rst.set_high();
-    timer.delay_ms(10000);
+    timer.delay_ms(500);
 
     // Hardware initialization for EPD
     epd::init(&mut spi, &mut cs, &mut dc, &mut busy);
