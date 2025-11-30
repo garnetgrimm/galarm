@@ -15,7 +15,6 @@ use hal::pac;
 mod epd;
 
 use embedded_hal::delay::DelayNs;
-use embedded_hal::digital::OutputPin;
 
 #[bsp::entry]
 fn main() -> ! {
@@ -55,7 +54,7 @@ fn main() -> ! {
     let spi = hal::spi::Spi::<_, _, _, 8>::new(pac.SPI0, (spi_mosi, spi_miso, spi_sclk));
 
     // Exchange the uninitialised SPI driver for an initialised one
-    let mut spi = spi.init(
+    let spi = spi.init(
         &mut pac.RESETS,
         clocks.peripheral_clock.freq(),
         16.MHz(),
@@ -66,27 +65,25 @@ fn main() -> ! {
 
     // Configure simple control pins for an EPD (examples: GPIO8-11).
     // Adjust pins to match your wiring.
-    let mut cs = pins.gpio2.into_push_pull_output();
-    let mut dc = pins.gpio3.into_push_pull_output();
-    let mut rst = pins.gpio9.into_push_pull_output();
-    let mut busy = pins.gpio8.into_pull_up_input();
+    let cs = pins.gpio2.into_push_pull_output();
+    let dc = pins.gpio3.into_push_pull_output();
+    let rst = pins.gpio9.into_push_pull_output();
+    let busy = pins.gpio8.into_pull_up_input();
 
-    let _ = rst.set_low();
-    timer.delay_ms(500);
-    let _ = rst.set_high();
-    timer.delay_ms(500);
+    let mut display = epd::PaperDisplay {
+        spi,
+        cs,
+        dc,
+        rst,
+        busy,
+    };
 
-    // Hardware initialization for EPD
-    epd::init(&mut spi, &mut cs, &mut dc, &mut busy);
-
-    const COLS: usize = 16;
-    const ROWS: usize = 16;
-    let data: [[u8; COLS]; ROWS] = [[0x00; COLS]; ROWS];
+    display.init(&mut timer);
 
     loop {
-        epd::write_full_screen(&mut spi, &mut cs, &mut dc, &mut busy, 0xFF);
+        display.write_full_screen(0x00);
         timer.delay_ms(1000);
-        epd::write_part(&mut spi, &mut cs, &mut dc, &mut busy, 64, 16, &data);
+        display.write_full_screen(0xFF);
         timer.delay_ms(1000);
     }
 }
