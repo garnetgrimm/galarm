@@ -36,10 +36,10 @@ where
     DC: OutputPin,
 {
     // DC low for command
-    let _ = dc.set_low();
-    let _ = cs.set_low();
-    let _ = spi.write(&[cmd]);
-    let _ = cs.set_high();
+    dc.set_low().unwrap();
+    cs.set_low().unwrap();
+    spi.write(&[cmd]).unwrap();
+    cs.set_high().unwrap();
 }
 
 fn write_data<SPI, CS, DC>(spi: &mut SPI, cs: &mut CS, dc: &mut DC, data: u8)
@@ -49,10 +49,10 @@ where
     DC: OutputPin,
 {
     // DC high for data
-    let _ = dc.set_high();
-    let _ = cs.set_low();
-    let _ = spi.write(&[data]);
-    let _ = cs.set_high();
+    dc.set_high().unwrap();
+    cs.set_low().unwrap();
+    spi.write(&[data]).unwrap();
+    cs.set_high().unwrap();
 }
 
 fn update<SPI, CS, DC, BUSY>(spi: &mut SPI, cs: &mut CS, dc: &mut DC, busy: &mut BUSY)
