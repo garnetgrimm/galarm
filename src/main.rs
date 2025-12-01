@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+use cortex_m::asm::wfi;
 // Ensure we halt the program on panic
 use panic_halt as _;
 
@@ -82,13 +83,14 @@ fn main() -> ! {
     display.init(&mut timer);
 
     loop {
-        display.fill_screen(0xff); // Fill buffer with black
-        display.write_full_screen(); // Update display with buffer
+        display.fill_screen(0x00); // Fill buffer with black
+        display.update(); // Update display with buffer
         timer.delay_ms(1000);
 
-        display.fill_screen(0x00); // Fill buffer with white
-        display.write_full_screen();
-        timer.delay_ms(1000);
+        display.fill_screen(0xff); // Fill buffer with white
+        display.update_window(16, 16, 16, 16); // Update a region (example)
+        display.power_off();
+        wfi();
     }
 }
 
