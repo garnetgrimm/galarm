@@ -6,61 +6,73 @@
 #![no_main]
 
 use defmt::*;
-use embassy_executor::Executor;
 use embassy_rp::gpio::{Level, Output, Input, Pull};
-use embassy_rp::multicore::{spawn_core1, Stack};
 use embassy_rp::spi;
 use embedded_hal_bus::spi::ExclusiveDevice;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::Channel;
-use embassy_time::{Delay, Timer, Duration};
-use static_cell::StaticCell;
+use embassy_time::{Delay, Duration, block_for};
 use {defmt_rtt as _, panic_probe as _};
 
 // epd
 use epd_waveshare::color::Color;
-use epd_waveshare::epd1in54_v2::{Display1in54, Epd1in54};
-use epd_waveshare::prelude::WaveshareDisplay;
+use epd_waveshare::epd2in13_v2::{Display2in13, Epd2in13};
+use epd_waveshare::prelude::{WaveshareDisplay, DisplayRotation};
 
-static mut CORE1_STACK: Stack<4096> = Stack::new();
-static EXECUTOR0: StaticCell<Executor> = StaticCell::new();
-static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
-static CHANNEL: Channel<CriticalSectionRawMutex, LedState, 1> = Channel::new();
-
-enum LedState {
-    On,
-    Off,
-}
+// embedded graphics
+use embedded_graphics::mono_font::MonoTextStyleBuilder;
+use embedded_graphics::mono_font::ascii::FONT_10X20;
+use embedded_graphics::prelude::*;
+use embedded_graphics::text::{Baseline, Text};
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
     let peripherals = embassy_rp::init(Default::default());
-    let led = Output::new(peripherals.PIN_26, Level::Low);
 
     let spi_bus = spi::Spi::new_blocking(
-        peripherals.SPI1,
-        peripherals.PIN_10,
-        peripherals.PIN_11,
-        peripherals.PIN_12,
+        peripherals.SPI0,
+        peripherals.PIN_6, // SCLK
+        peripherals.PIN_7, // MOSI
+        peripherals.PIN_4, // MISO
         spi::Config::default(),
     );
 
 
-    let busy_in = Input::new(peripherals.PIN_1, Pull::None);
+    let busy_in = Input::new(peripherals.PIN_8, Pull::None);
     let cs = Output::new(peripherals.PIN_2, Level::Low);
     let dc = Output::new(peripherals.PIN_3, Level::Low);
-    let reset = Output::new(peripherals.PIN_4, Level::Low);
+    let reset = Output::new(peripherals.PIN_9, Level::Low);
     
     let mut spi_dev = ExclusiveDevice::new(spi_bus, cs, Delay).unwrap();
 
-    let mut display = Display1in54::default();
-    let mut epd = Epd1in54::new(&mut spi_dev, busy_in, dc, reset, &mut Delay, None).unwrap();
+    let mut display = Display2in13::default();
+    let mut epd = Epd2in13::new(&mut spi_dev, busy_in, dc, reset, &mut Delay, None).unwrap();
 
 
     // Clear any existing image
+    display.set_rotation(DisplayRotation::Rotate90);
     epd.clear_frame(&mut spi_dev, &mut Delay).unwrap();
+    display.clear(Color::White).unwrap();
     epd.update_and_display_frame(&mut spi_dev, display.buffer(), &mut Delay)
         .unwrap();
-    let _ = Timer::after(Duration::from_secs(5));
-    loop {}
+    block_for(Duration::from_secs(1));
+
+    draw_text(&mut display, "impl Rust for ESP32", 3, 100);
+    epd.update_and_display_frame(&mut spi_dev, display.buffer(), &mut Delay)
+        .unwrap();
+    
+    loop {
+        info!("Hello world!");
+        block_for(Duration::from_secs(1));
+    }
+}
+
+
+fn draw_text(display: &mut Display2in13, text: &str, x: i32, y: i32) {
+    let text_style = MonoTextStyleBuilder::new()
+        .font(&FONT_10X20)
+        .text_color(Color::Black)
+        .build();
+
+    Text::with_baseline(text, Point::new(x, y), text_style, Baseline::Top)
+        .draw(display)
+        .unwrap();
 }
