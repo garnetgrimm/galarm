@@ -19,6 +19,12 @@ panic-probe = { version = "0.3.2", features = ["print-defmt"] }
 portable-atomic = { version = "1.8.0", features = ["critical-section"] }
 static_cell = "2.1.0"
 
+epd-waveshare = { features = [
+  "graphics",
+], git = "https://github.com/ImplFerris/epd-waveshare", branch = "1in54_v2_fix" }
+embedded-hal-bus = { version = "0.3" }
+embedded-graphics = "0.8.1"
+
 [profile.release]
 debug = 2
 lto = true
