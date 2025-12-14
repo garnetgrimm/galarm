@@ -22,6 +22,9 @@ use embedded_graphics::mono_font::MonoTextStyleBuilder;
 use embedded_graphics::mono_font::ascii::FONT_10X20;
 use embedded_graphics::prelude::*;
 use embedded_graphics::text::{Baseline, Text};
+use embedded_graphics::image::Image;
+
+use tinybmp::Bmp;
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
@@ -55,7 +58,13 @@ fn main() -> ! {
         .unwrap();
     block_for(Duration::from_secs(1));
 
-    draw_text(&mut display, "impl Rust for ESP32", 3, 100);
+    draw_text(&mut display, "Littol Junimo!", 3, 100);
+
+    let bmp_data = include_bytes!("../res/junimo.bmp");
+    let bmp = Bmp::from_slice(bmp_data).unwrap();
+    let image = Image::new(&bmp, Point::new(25, 60));
+    image.draw(&mut display).unwrap();
+
     epd.update_and_display_frame(&mut spi_dev, display.buffer(), &mut Delay)
         .unwrap();
     

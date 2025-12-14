@@ -24,6 +24,7 @@ epd-waveshare = { features = [
 ], git = "https://github.com/ImplFerris/epd-waveshare", branch = "1in54_v2_fix" }
 embedded-hal-bus = { version = "0.3" }
 embedded-graphics = "0.8.1"
+tinybmp = "0.6.0"
 
 [profile.release]
 debug = 2
