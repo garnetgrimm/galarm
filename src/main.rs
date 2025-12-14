@@ -15,7 +15,7 @@ use {defmt_rtt as _, panic_probe as _};
 // epd
 use epd_waveshare::color::Color;
 use epd_waveshare::epd2in13_v2::{Display2in13, Epd2in13};
-use epd_waveshare::prelude::{WaveshareDisplay, DisplayRotation};
+use epd_waveshare::prelude::*;
 
 // embedded graphics
 use embedded_graphics::mono_font::MonoTextStyleBuilder;
@@ -67,7 +67,18 @@ fn main() -> ! {
 
     epd.update_and_display_frame(&mut spi_dev, display.buffer(), &mut Delay)
         .unwrap();
-    
+
+    epd.set_lut(&mut spi_dev, &mut Delay, Some(RefreshLut::Quick)).unwrap();
+    let small_buffer = [Color::Black.get_byte_value(); 32]; //16x16
+    for i in 0..8 {
+        let offset = i * 8 % 150;
+        epd.update_partial_frame(&mut spi_dev, &mut Delay, &small_buffer, 25 + offset, 25 + offset, 16, 16)
+            .unwrap();
+        epd.display_frame(&mut spi_dev, &mut Delay)
+            .unwrap();
+        block_for(Duration::from_millis(100));
+    }
+
     loop {
         info!("Hello world!");
         block_for(Duration::from_secs(1));
