@@ -1,8 +1,15 @@
-[target.'cfg(all(target_arch = "arm", target_os = "none"))']
-runner = "elf2uf2-rs -d"
-
-[build]
-target = "thumbv6m-none-eabi"
+[target.xtensa-esp32-none-elf]
+runner = "espflash flash --monitor --chip esp32 --log-format defmt"
 
 [env]
-DEFMT_LOG = "debug"
+DEFMT_LOG="info"
+
+[build]
+rustflags = [
+  "-C", "link-arg=-nostartfiles",
+]
+
+target = "xtensa-esp32-none-elf"
+
+[unstable]
+build-std = ["core"]
